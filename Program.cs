@@ -9,14 +9,11 @@ using System.Threading;
 namespace _3sem_lab15
 {
 
-    public interface IObserver
-    {
-        void Update(string path);
-    }
-
     public class FileObserver
     {
-        private List<IObserver> observers = new List<IObserver>();
+        private static DateTime LastFileChangeTime = DateTime.MinValue;
+        public event EventHandler<string> FileChanged;
+
         private string directoryPath;
 
         public FileObserver(string path)
@@ -24,38 +21,43 @@ namespace _3sem_lab15
             directoryPath = path;
         }
 
-        public void Subscribe(IObserver observer)
+        public void Subscribe(EventHandler<string> handler)
         {
-            observers.Add(observer);
+            FileChanged += handler;
         }
 
-        public void Unsubscribe(IObserver observer)
+        public void Unsubscribe(EventHandler<string> handler)
         {
-            observers.Remove(observer);
+            FileChanged -= handler;
         }
 
         public void CheckDirectory()
         {
-            foreach (var observer in observers)
+            string[] files = Directory.GetFiles(directoryPath);
+
+            foreach (var file in files)
             {
-                observer.Update(directoryPath);
+                DateTime currentFileChangeTime = File.GetLastWriteTime(file);
+
+                if (currentFileChangeTime != LastFileChangeTime)
+                {
+                    OnFileChanged(file);
+                    LastFileChangeTime = currentFileChangeTime;
+                }
             }
+        }
+
+        protected virtual void OnFileChanged(string filePath)
+        {
+            FileChanged?.Invoke(this, filePath);
         }
     }
 
-    public class ConcreteObserver : IObserver
+    public class ConcreteObserver
     {
-        private DateTime lastFileChangeTime = DateTime.MinValue;
-
-        public void Update(string filePath)
+        public void HandleFileChange(object sender, string filePath)
         {
-            DateTime currentFileChangeTime = File.GetLastWriteTime(filePath);
-
-            if (currentFileChangeTime != lastFileChangeTime)
-            {
-                Console.WriteLine($"File {filePath} has changed!");
-                lastFileChangeTime = currentFileChangeTime;
-            }
+            Console.WriteLine($"File {filePath} has changed");
         }
     }
 
@@ -124,11 +126,15 @@ namespace _3sem_lab15
     {
         static void Main(string[] args)
         {
-            // Пример использования Observer
-            FileObserver fileObserver = new FileObserver("C:\\Users\\belog\\Downloads\\testfile.txt");
+            FileObserver fileObserver = new FileObserver("C:\\Users\\belog\\Downloads\\testFolder");
             ConcreteObserver concreteObserver = new ConcreteObserver();
-            fileObserver.Subscribe(concreteObserver);
-            Timer timer = new Timer(_ => fileObserver.CheckDirectory(), null, 0, 500);
+            fileObserver.Subscribe(concreteObserver.HandleFileChange);
+            Timer timer = new Timer(_ => fileObserver.CheckDirectory(), null, 0, 5000);
+
+            while (Console.ReadKey().Key != ConsoleKey.Q) { }
+
+            timer.Dispose();
+            Console.ReadLine();
             
             //Пример использования Repository
             MyLogger logger = new MyLogger("C:\\Users\\belog\\Downloads\\testfile.txt");
